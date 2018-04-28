@@ -1418,7 +1418,7 @@ int setResult(char* outputFileName, double result) {
   datei =  fopen(outputFileName, "w");
   if (!datei) {printf("FEHLER: output-File nicht gefunden\n");exit(0);}
 
-  fprintf(datei, "%f\n", result); 
+  fprintf(datei, "%e\n", result); 
   fclose(datei);
   return 0;
 }

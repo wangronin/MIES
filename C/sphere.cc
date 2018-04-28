@@ -50,21 +50,17 @@ int main(int argc, char **argv)
   fclose(datei);
   for(int i = 1; i < count; i++) {
     x[i-1] = atof(lines[i]);
+    
   }
   
   //******************* function call *********************
   res = sphere(atoi(lines[0]), x);  // dimension length = count - 1
   //*******************************************************
 
-  
-
-
   // write back result ****************************
   datei =  fopen(outputFileName, "w");
-  fprintf(datei,"%f\n",res);
+  fprintf(datei,"%.38f\n",res);
   fclose(datei);
-
-
 }
 
 double sphere(int n,double *x)
@@ -73,10 +69,10 @@ double sphere(int n,double *x)
 	int i;
 	double	res = 0.0;
 
-	for (i=0;i<n;i++)
-	    res += x[i]*x[i];
-
-        return(res);
+	for (i=0;i<n;i++){
+	  res += x[i]*x[i];
+  }
+  return(res);
 }
 
 

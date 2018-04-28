@@ -39,7 +39,7 @@ double mutate_step_d(double val, double tau, double tau_prime, double u,
                      STEP_SIZE_MODE mode, int dim_d);
 double mutate_d(double val, double step, double lb, double ub);
 
-main(int argc, char** argv)
+int main(int argc, char** argv)
 {
   char* function;
   char inFile[MAX_FILENAME_LENGTH];
@@ -270,7 +270,7 @@ main(int argc, char** argv)
     }
   }
 
-printf("Generation %d:\n", gen);
+// printf("Generation %d:\n", gen);
   fn_best = MAX_DOUBLE;
   FORALL(j,mu) // Evaluate initial population
   {
@@ -294,18 +294,18 @@ printf("Generation %d:\n", gen);
     ++cnt;
   }
 
-  printf("Initial parents:\n");
-  FORALL(j,mu)
-  {
-    printf("f: %f; x: ", fe[j]);
-    FORALL(k,dim - 1)
-    {
-      printf("%f, ", xe[j][k]);
-    }
-    printf("%f; ", xe[j][dim - 1]);
+  // printf("Initial parents:\n");
+  // FORALL(j,mu)
+  // {
+  //   printf("f: %f; x: ", fe[j]);
+  //   FORALL(k,dim - 1)
+  //   {
+  //     printf("%f, ", xe[j][k]);
+  //   }
+  //   printf("%f; ", xe[j][dim - 1]);
 
-    printf("age: %d\n", age[j]);
-  }
+  //   printf("age: %d\n", age[j]);
+  // }
 
 //printf("Initial parent step sizes:\n");
 //FORALL(j,lambda)
@@ -430,7 +430,7 @@ printf("Generation %d:\n", gen);
     fn_old = fn_best; // the best value of previous generation among with mu plus lambda individuals 
     fn_best = MAX_DOUBLE; // for the finding of best value in new lambda individuals
     n_better = 0; // How many individuals are better than old-best value
-printf("Generation %d:\n", gen);
+// printf("Generation %d:\n", gen);
     FORALL(j,lambda)
     {
       setXvector(inFile, xn[j], dim);
@@ -449,7 +449,8 @@ printf("Generation %d:\n", gen);
 
       if (fn[j] < fn_old) n_better++;	
 
-      print(cnt, fn[j], fn_best_all_times, xn[j]);
+      // print(cnt, fn[j], fn_best_all_times, xn[j]);
+      
 
       if(checkTermination(cnt, fn_best_all_times) == 1)
       {
@@ -458,6 +459,7 @@ printf("Generation %d:\n", gen);
       }
       ++cnt;
     }
+    // printf("iteration %i, %.20f\n", gen, log10(fn_best_all_times));
     /********************************************************************
      *   Replace mu parent individuals by lambda best offspring         *
      ********************************************************************/
@@ -600,32 +602,39 @@ printf("Generation %d:\n", gen);
 
     }
 
-  printf("New parents:\n");
-  FORALL(j,mu)
-  {
-    printf("f: %f; x: ", fe[j]);
-    FORALL(k,dim - 1)
-    {
-      printf("%f, ", xe[j][k]);
-    }
-    printf("%f; ", xe[j][dim - 1]);
+  // printf("New parents:\n");
+  // FORALL(j,mu)
+  // {
+  //   printf("f: %.10e; x: ", fe[j]);
+  //   FORALL(k,dim - 1)
+  //   {
+  //     printf("%e, ", xe[j][k]);
+  //   }
+  //   printf("%e; ", xe[j][dim - 1]);
 
-    printf("age: %d\n", age[j]);
-  }
+  //   FORALL(k,dim)
+  //   {
+  //     printf("%f, ", se[j][k]);
+  //   }
+
+  //   printf("age: %d\n", age[j]);
+  // }
 
   }
 
   // Print final population
-  printf("Final population:\n");
-  FORALL(j,mu)
-  {
-    printf("f: %f; x: ", fe[j]);
-    FORALL(k,dim - 1)
-    {
-      printf("%f, ", xe[j][k]);
-    }
-    printf("%f\n", xe[j][dim - 1]);
-  }
+  // printf("Final population:\n");
+  // FORALL(j,mu)
+  // {
+  //   printf("f: %e; x: ", fe[j]);
+  //   FORALL(k,dim - 1)
+  //   {
+  //     printf("%f, ", xe[j][k]);
+  //   }
+  //   printf("%f\n", xe[j][dim - 1]);
+  // }
+  printf("%e", fn_best_all_times);
+  return(0);
 }
 
 double getStepMIES(TYPE type, double lb, double ub, int dim_d)
