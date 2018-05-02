@@ -14,6 +14,7 @@ from abc import abstractmethod
 from pyDOE import lhs
 
 # TODO: fix bugs in bounds when calling __mul__
+# TODO: change __mul__ --> __add__
 # TODO: implementa sampling method: LHS for mixed search space
 class SearchSpace(object):
     def __init__(self, bounds, var_name):

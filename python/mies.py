@@ -15,68 +15,13 @@ from utils import boundary_handling
 from base import Solution
 from SearchSpace import ContinuousSpace, OrdinalSpace, NominalSpace
 
-class evolution_strategy(object):
-    
-    def __init__(self, search_space, obj_func, x0=None, ftarget=None, max_eval=np.inf,
-                 minimize=True, mu_=4, lambda_=10, sigma0=None, eta0=None, P0=None,
-                 verbose=False):
-                     
-        self.verbose = verbose
-        self.mu_ = mu_
-        self.lambda_ = lambda_
-        self.eval_count = 0
-        self.iter_count = 0
-        self.max_eval = max_eval
-        self.plus_selection = False
-        
-    def evaluate(self, pop):
-        if not hasattr(pop[0], '__iter__'):
-            pop = [pop]
-        N = len(pop)
-        f = np.zeros(N)
-        for i, individual in enumerate(pop):
-            var = individual[self._id_var]
-            f[i] = np.sum(self.obj_func(var)) # in case a 1-length array is returned
-            individual.fitness = f[i]
-            self.eval_count += 1
-        return f
-    
-    def select(self):
-        pop = self.pop_mu + self.pop_lambda if self.plus_selection else self.pop_lambda
-        fitness = np.r_[self.f_mu, self.f_lambda] if self.plus_selection else self.f_lambda
-        
-        fitness_rank = argsort(fitness)
-        if not self.minimize:
-            fitness_rank = fitness_rank[::-1]
-        
-        sel_id = fitness_rank[:self.mu_]
-        self.pop_mu = pop[sel_id]
-        self.f_mu = fitness[sel_id]
-        
-
-class self_adaptive_es(evolution_strategy):
-
-    def mutate(self, individual):
-        sigma = np.array(individual[self._id_sigma])
-        if len(self._id_sigma) == 1:
-            sigma = sigma * exp(self.tau_r * randn())
-        else:
-            sigma = sigma * exp(self.tau_r * randn() + self.tau_p_r * randn(self.N_r))
-        
-        # Gaussian mutation
-        R = randn(self.N_r)
-        x = np.array(individual[self.id_r])
-        x_ = x + sigma * R
-        
-        # Interval Bounds Treatment
-        x_ = boundary_handling(x_, self.bounds_r[:, 0], self.bounds_r[:, 1])
-        
-        # Repair the step-size if x_ is out of bounds
-        individual[self._id_sigma] = np.abs((x_ - x) / R)
-        individual[self.id_r] = x_
-        
-        return individual
-
+def rgeom(p, size=1):
+    u = rand(size)
+    g = np.floor(np.log(u) / np.log(1. - p))
+    if size == 1:
+        g = int(g)
+        u = float(u)
+    return g, u
 
 # TODO: improve efficiency, e.g. compile it with cython
 # TODO: try to use advanced python default parameter 
@@ -145,10 +90,10 @@ class mies(object):
         
          # initialize the populations
         if x0 is not None:                         # given x0
-            self.pop_mu = Solution(np.tile(np.r_[x0, sigma0, eta0, [P0] * self.N_p], (self.mu_, 1)),
-                                   var_name=self.var_names + par_name, verbose=self.verbose)
-            fitness0 = self.evaluate(self.pop_mu[0])
-            self.f_mu = np.repeat(fitness0, self.mu_)
+            self.pop = Solution(np.tile(np.r_[x0, sigma0, eta0, [P0] * self.N_p], (self.mu_, 1)),
+                                var_name=self.var_names + par_name, verbose=self.verbose)
+            fitness0 = self.evaluate(self.pop[0])
+            self.fitness = np.repeat(fitness0, self.mu_)
             self.xopt = x0
             self.fopt = sum(fitness0)
         else:                                     # uniform sampling
@@ -161,13 +106,13 @@ class mies(object):
             if P0 is not None:
                 x = np.c_[x, np.tile([P0] * self.N_p, (self.mu_, 1))]
             
-            self.pop_mu = Solution(x, var_name=self.var_names + par_name, verbose=self.verbose)
-            self.f_mu = self.evaluate(self.pop_mu)
-            self.fopt = min(self.f_mu) if self.minimize else max(self.f_mu)
-            self.xopt = self.pop_mu[self.fopt == self.f_mu, self._id_var]
+            self.pop = Solution(x, var_name=self.var_names + par_name, verbose=self.verbose)
+            self.fitness = self.evaluate(self.pop)
+            self.fopt = min(self.fitness) if self.minimize else max(self.fitness)
+            self.xopt = self.pop[self.fopt == self.fitness, self._id_var]
             
-        self.pop_lambda = self.pop_mu[0] * self.lambda_
-        self.f_lambda = [self.f_mu[0]] * self.lambda_
+        self.offspring = self.pop[0] * self.lambda_
+        self.f_offspring = np.asarray([self.fitness[0]] * self.lambda_)
         self._set_hyperparameter()
 
         # stopping criteria
@@ -196,34 +141,33 @@ class mies(object):
             self.tau_p_d = 1 / np.sqrt(2 * np.sqrt(self.N_d))
 
     def recombine(self, id1, id2):
-        p1 = self.pop_mu[id1].copy()  # IMPORTANT: make a copy
+        p1 = self.pop[id1].copy()  # IMPORTANT: make a copy
         if id1 != id2:
-            p2 = self.pop_mu[id2]
+            p2 = self.pop[id2]
             # intermediate recombination for the mutation strengths
             p1[self._id_hyperpar] = (np.array(p1[self._id_hyperpar]) + \
                 np.array(p2[self._id_hyperpar])) / 2
 
             # dominant recombination for solution parameters
-            mask = np.nonzero(randn(self.dim) > 0.5)[0]
-            p1[mask] = p2[mask]
+            _, = np.nonzero(randn(self.dim) > 0.5)
+            p1[_] = p2[_]
         return p1
 
     def select(self):
-        pop = self.pop_mu + self.pop_lambda if self.plus_selection else self.pop_lambda
-        fitness = np.r_[self.f_mu, self.f_lambda] if self.plus_selection else self.f_lambda
-        
-        fitness_rank = argsort(fitness)
+        pop = self.pop + self.offspring if self.plus_selection else self.offspring
+        fitness = np.r_[self.fitness, self.f_offspring] if self.plus_selection else self.f_offspring
+        rank = argsort(fitness)
         if not self.minimize:
-            fitness_rank = fitness_rank[::-1]
+            rank = rank[::-1]
         
-        sel_id = fitness_rank[:self.mu_]
-        self.pop_mu = pop[sel_id]
-        self.f_mu = fitness[sel_id]
+        _ = rank[:self.mu_]
+        self.pop = pop[_]
+        self.fitness = fitness[_]
 
     def evaluate(self, pop):
-        if len(pop.shape) == 1:
-            f = np.asanyarray(self.obj_func(pop[self._id_var]))
-        else:
+        if len(pop.shape) == 1:  # one solution
+            f = np.asarray(self.obj_func(pop[self._id_var]))
+        else:                    # a population
             f = np.asarray(map(self.obj_func, pop[:, self._id_var]))
         self.eval_count += pop.N
         pop.fitness = f
@@ -257,47 +201,62 @@ class mies(object):
         # the constraint handling method will (by chance) turn really bad cadidates
         # (the one with huge sigmas) to good ones and hence making the step size explode
         # Repair the step-size if x_ is out of bounds
-        if 1 < 2:
+        # TODO: this modification yields better performance. verify if it is caused by premature
+        # convegence
+        if 11 < 2:
             individual[self._id_sigma] = np.abs((x_ - x) / R)
         else:
             individual[self._id_sigma] = sigma
         individual[self.id_r] = x_
         
     def _mutate_i(self, individual):
-        eta = np.asarray(individual[self._id_eta], dtype='float')
+        eta = np.asarray(individual[self._id_eta].tolist(), dtype='float')
         x = np.asarray(individual[self.id_i], dtype='int')
         if len(self._id_eta) == 1:
-            eta = max(1, eta * exp(self.tau_i * randn()))
-            p = 1 - (eta / self.N_i) / (1 + np.sqrt(1 + (eta / self.N_i) ** 2))
-            x_ = x + geometric(p, self.N_i) - geometric(p, self.N_i)
+            eta = eta * exp(self.tau_i * randn())
         else:
             eta = eta * exp(self.tau_i * randn() + self.tau_p_i * randn(self.N_i))
-            eta[eta > 1] = 1
-            p = 1 - (eta / self.N_i) / (1 + np.sqrt(1 + (eta / self.N_i) ** 2))
-            x_ = x + np.array([geometric(p_) - geometric(p_) for p_ in p])
+        eta[eta > 1] = 1
+
+        p = 1 - (eta / self.N_i) / (1 + np.sqrt(1 + (eta / self.N_i) ** 2.))
+        g1, u1 = zip(*[rgeom(_) for _ in p])
+        g2, u2 = zip(*[rgeom(_) for _ in p])
+        g1, g2 = map(lambda x: np.asarray(x, dtype='int'), (g1, g2))
+        u1, u2 = map(lambda x: np.asarray(x, dtype='float'), (u1, u2))
+        x_ = x + g1 - g2
 
         # Interval Bounds Treatment
-        x_ = boundary_handling(x_, self.bounds_i[:, 0], self.bounds_i[:, 1])
-        individual[self.id_i] = x_
+        x__ = boundary_handling(x_, self.bounds_i[:, 0], self.bounds_i[:, 1])
+
+        # TODO: finish the implementation here and test it
+        if 11 < 2:
+            idx, = np.nonzero(x_ != x__)
+            p_ = 1. - (u1 / u2) ** (1. / abs(x__ - x))
+            if any(np.isinf(p_)):
+                pdb.set_trace()
+            eta[idx] = 2. * (1 - p_[idx]) / (p_[idx] * (2. - p_[idx]))
+
+        individual[self.id_i] = x__
         individual[self._id_eta] = eta
 
     def _mutate_d(self, individual):
         P = np.asarray(individual[self._id_p], dtype='float')
-        P = 1 / (1 + (1 - P) / P * exp(-self.tau_d * randn()))
-        individual[self._id_p] = boundary_handling(P, 1 / (3. * self.N_d), 0.5)
+        #  Unbiased mutation on the mutation probability
+        P = 1. / (1. + (1. - P) / P * exp(-self.tau_d * randn()))
+        individual[self._id_p] = boundary_handling(P, 1. / (3. * self.N_d), 0.5)
 
-        idx = np.nonzero(rand(self.N_d) < P)[0]
+        idx, = np.nonzero(rand(self.N_d) < P)
         for i in idx:
-            level = self.bounds_d[i]
-            individual[self.id_d[i]] = level[randint(0, len(level))]
+            levels = self.bounds_d[i]
+            individual[self.id_d[i]] = levels[randint(0, len(levels))]
 
     def stop(self):
         if self.eval_count > self.max_eval:
             self.stop_dict['max_eval'] = True
 
         if self.eval_count != 0 and self.iter_count != 0:
-            fitness = self.f_lambda
-            # sigma = np.atleast_2d([__[self._id_sigma] for __ in self.pop_mu]) 
+            fitness = self.f_offspring
+            # sigma = np.atleast_2d([__[self._id_sigma] for __ in self.pop]) 
             # sigma_mean = np.mean(sigma, axis=0)
             
             # tolerance on fitness in history
@@ -330,40 +289,36 @@ class mies(object):
         return any(self.stop_dict.values())
 
     def _better(self, f1, f2):
-        if self.minimize:
-            return f1 < f2
-        else:
-            return f1 > f2
+        return f1 < f2 if self.minimize else f1 > f2
 
     def optimize(self):
         while not self.stop():
+            # TODO: vectorize this part
             for i in range(self.lambda_):
                 p1, p2 = randint(0, self.mu_), randint(0, self.mu_)
                 individual = self.recombine(p1, p2)
-                self.pop_lambda[i] = self.mutate(individual)
+                self.offspring[i] = self.mutate(individual)
             
-            self.f_lambda = self.evaluate(self.pop_lambda)
+            self.f_offspring[:] = self.evaluate(self.offspring)
             self.select()
 
-            curr_best = self.pop_mu[0]
-            xopt_, fopt_ = curr_best[self._id_var], self.f_mu[0]
-            self.iter_count += 1
+            curr_best = self.pop[0]
+            xopt_, fopt_ = curr_best[self._id_var], self.fitness[0]
 
             if self._better(fopt_, self.fopt):
                 self.xopt, self.fopt = xopt_, fopt_
+            self.iter_count += 1
 
             if self.verbose:
-                print('iteration ', self.iter_count + 1)
-                print(self.pop_mu)
+                print('iteration {}, fopt: {}'.format(self.iter_count + 1, self.fopt))
+                print(self.pop)
 
         self.stop_dict['funcalls'] = self.eval_count
         return self.xopt, self.fopt, self.stop_dict
 
 
 if __name__ == '__main__':
-
-#    np.random.seed(1)
-    
+    # np.random.seed(1)
     if 11 < 2:
         def fitness(x):
             x_r, x_i, x_d = np.array(x[:2]), x[2], x[3]
@@ -373,30 +328,61 @@ if __name__ == '__main__':
                 tmp = 1
             return np.sum(x_r ** 2) + abs(x_i - 10) / 123. + tmp * 2
     
-        x0 = [2, 1, 80, 'B']
-        bounds = [[-5, -5, -100], [5, 5, 100]]
-        levels = [['OK', 'A', 'B', 'C', 'D', 'E', 'F', 'G']]
-    
-        opt = mies(x0, fitness, bounds, levels, ['C', 'C', 'O', 'N'], 5e5, verbose=True)
+        space = (ContinuousSpace([-5, 5]) * 2) * OrdinalSpace([5, 15]) * \
+            NominalSpace(['OK', 'A', 'B', 'C', 'D', 'E', 'F', 'G'])
+        opt = mies(space, fitness, max_eval=1e3, verbose=True)
+        xopt, fopt, stop_dict = opt.optimize()
     
     else:
-        def fitness(x):
+        def sphere(x):
             x = np.asarray(x, dtype='float')
             return np.sum(x ** 2.)
         
-        dim = 2
+        def rand(x):
+            return np.random.rand()
+        
+        dim = 5
         space = ContinuousSpace([-5, 5]) * dim
-        if 11 < 2:
-            # test for continous maximization problem
-            opt = mies(space, fitness, max_eval=500, minimize=True, verbose=True)
+        if 1 < 2:   # test for continous maximization problem
+            opt = mies(space, sphere, max_eval=500, minimize=True, verbose=True)
             xopt, fopt, stop_dict = opt.optimize()
             print(stop_dict)
-            
-        else:
-            N = int(500)
+        
+        if 11 < 2:   # for statistical test
+            N = int(1e2)
+            max_eval = int(1000)
             fopt = np.zeros((1, N))
+            hist_sigma = zeros((100, N))
             for i in range(N):
-                opt = mies(space, fitness, max_eval=500, verbose=False)
+                opt = mies(space, fitness, max_eval=max_eval, verbose=False)
                 xopt, fopt[0, i], stop_dict = opt.optimize()
             
             np.savetxt('mies.csv', fopt, delimiter=',')
+            
+        if 11 < 2:  
+            N = int(50)
+            max_eval = int(1000)
+            fopt = np.zeros((1, N))
+            hist_sigma = zeros((100, N))
+            hist_fitness = zeros((100, N))
+            
+            for i in range(N):
+                opt = mies(space, fitness, max_eval=max_eval, verbose=False)
+                xopt, fopt[0, i], stop_dict, hist_fitness[:, i], hist_sigma[:, i] = opt.optimize()
+            
+            import matplotlib.pyplot as plt
+            
+            with plt.style.context('ggplot'):
+                fig0, (ax0, ax1) = plt.subplots(1, 2, figsize=(10, 10), dpi=100)
+                for i in range(N):
+                    ax0.semilogy(range(100), hist_fitness[:, i])
+                    ax1.semilogy(range(100), hist_sigma[:, i])
+                    
+                ax0.set_xlabel('iteration')
+                ax0.set_ylabel('fitness')
+                ax1.set_xlabel('iteration')
+                ax1.set_ylabel('Step-sizes')
+                
+                fig0.suptitle('Sphere {}D'.format(dim))
+                plt.show()
+            
