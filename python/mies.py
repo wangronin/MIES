@@ -201,9 +201,7 @@ class mies(object):
         # the constraint handling method will (by chance) turn really bad cadidates
         # (the one with huge sigmas) to good ones and hence making the step size explode
         # Repair the step-size if x_ is out of bounds
-        # TODO: this modification yields better performance. verify if it is caused by premature
-        # convegence
-        if 11 < 2:
+        if 1 < 2:
             individual[self._id_sigma] = np.abs((x_ - x) / R)
         else:
             individual[self._id_sigma] = sigma
